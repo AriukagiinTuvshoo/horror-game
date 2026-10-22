@@ -8,6 +8,12 @@ async function start(page: Page) {
   await expect(page.locator('.loading-screen')).toHaveCount(0, { timeout: 30000 });
 }
 
+/**
+ * DEV-ONLY TELEPORT HELPER — mutates player position/clock directly via engine state.
+ * This does NOT prove walkability or that a real player can reach the target by holding W/A/S/D
+ * through connected rooms and doors. It is kept for concise mission-UI coverage; the genuine
+ * control-driven route is tested separately in "player can advance via real controls without teleport".
+ */
 async function approach(page: Page, id: string) {
   await page.evaluate(async objectId => {
     const { OBJECTS } = await import('/src/game/world.ts');
@@ -171,6 +177,78 @@ test('the bad ending keeps the checkpoint and allows immediate retry', async ({ 
   await page.getByRole('button', { name: 'RETRY FROM CHECKPOINT' }).click();
   await expect(page.locator('.loading-screen')).toHaveCount(0, { timeout: 30000 });
   await expect(page.locator('.hud-objective strong')).toHaveText('Bring the lights back.');
+});
+
+test('player can advance via real controls without teleport — walk, pause, and resume', async ({ page }) => {
+  await start(page);
+  await page.keyboard.press('e');
+  await page.getByRole('button', { name: 'TAKE THE KEY & CLOCK IN' }).click();
+  await expect(page.locator('.hud-objective strong')).toHaveText('Bring the lights back.');
+  const startPos = await page.evaluate(() => ({ x: window.__nightshift!.state.player.x, z: window.__nightshift!.state.player.z }));
+  // Genuine keyboard movement: hold W (forward) along the north corridor — no position injection
+  await page.keyboard.down('w');
+  await page.waitForTimeout(1100);
+  await page.keyboard.up('w');
+  const afterPos = await page.evaluate(() => ({ x: window.__nightshift!.state.player.x, z: window.__nightshift!.state.player.z }));
+  // Must have moved south by >1 world unit through connected, walkable tiles
+  expect(afterPos.z).toBeGreaterThan(startPos.z + 0.9);
+  // Still on walkable ground, not inside furniture (isPassable check)
+  const passable = await page.evaluate(async () => {
+    const { isPassable } = await import('/src/game/world.ts');
+    const s = window.__nightshift!.state;
+    return isPassable(s.player.x, s.player.z, s);
+  });
+  expect(passable).toBe(true);
+  // Pause must freeze the clock; resume must advance it
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('heading', { name: 'Take a breath.' })).toBeVisible();
+  const pausedAt = await page.evaluate(() => window.__nightshift!.state.elapsed);
+  await page.waitForTimeout(350);
+  expect(await page.evaluate(() => window.__nightshift!.state.elapsed)).toBe(pausedAt);
+  await page.getByRole('button', { name: 'Resume shift' }).click();
+  await page.waitForTimeout(450);
+  expect(await page.evaluate(() => window.__nightshift!.state.elapsed)).toBeGreaterThan(pausedAt);
+});
+
+test('victory clears checkpoint (Continue disabled) and death/restart semantics', async ({ page }) => {
+  // Victory path — Continue must be disabled after secret ending
+  await start(page);
+  await page.keyboard.press('e'); await page.getByRole('button', { name: 'TAKE THE KEY & CLOCK IN' }).click();
+  await approach(page, 'generator');
+  await page.getByRole('textbox', { name: 'Access code' }).fill('0317');
+  await page.getByRole('button', { name: 'RESTORE POWER', exact: true }).click();
+  await approach(page, 'monitor');
+  await page.getByRole('button', { name: /02.*WARD C/ }).click();
+  await page.getByRole('button', { name: 'MARK THE MOVEMENT' }).click();
+  await approach(page, 'ward');
+  await page.getByRole('button', { name: /Search beneath the empty bed/ }).click();
+  await approach(page, 'records');
+  await page.getByRole('textbox', { name: 'Access code' }).fill('1984');
+  await page.getByRole('button', { name: 'UNSEAL THE FILE' }).click();
+  await page.getByRole('button', { name: /Keep a private copy/ }).click();
+  await approach(page, 'isolation');
+  await page.getByRole('button', { name: /Restore the patient's oxygen/ }).click();
+  await approach(page, 'tape');
+  await page.getByRole('button', { name: 'TAKE THE WITNESS TAPE' }).click();
+  await approach(page, 'secret');
+  await page.getByRole('textbox', { name: 'Memorial safe answer' }).fill('silence');
+  await page.getByRole('button', { name: 'Unlock memorial safe' }).click();
+  await approach(page, 'monitor');
+  await page.getByRole('button', { name: 'BROADCAST THE TESTIMONY' }).click();
+  await page.evaluate(() => { window.__nightshift!.state.elapsed = 480; window.__nightshift!.refresh(); });
+  await approach(page, 'exit');
+  await page.getByRole('button', { name: 'OPEN THE FRONT DOORS' }).click();
+  await expect(page.getByRole('heading', { name: 'No one left behind.' })).toBeVisible();
+  // Return to menu — victory must have cleared SAVE_KEY, so Continue disabled
+  await page.getByRole('button', { name: 'MAIN MENU' }).click();
+  await expect(page.getByRole('button', { name: /CONTINUE/ })).toBeDisabled();
+  await expect(page.locator('.no-checkpoint')).toBeVisible();
+  // Fresh shift after victory must start at mission 0 with no health loss
+  await page.getByRole('button', { name: 'BEGIN YOUR SHIFT' }).click();
+  await expect(page.locator('canvas')).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('.loading-screen')).toHaveCount(0, { timeout: 30000 });
+  expect(await page.evaluate(() => window.__nightshift!.state.mission)).toBe(0);
+  expect(await page.evaluate(() => window.__nightshift!.state.player.health)).toBe(100);
 });
 
 test('language, avatar, camera modes, sanity, and cinematic transitions are functional', async ({ page }) => {

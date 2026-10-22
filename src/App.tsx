@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { ArrowRight, Award, BriefcaseMedical, ChevronRight, Clock3, Headphones, HeartPulse, HelpCircle, Play, RotateCcw, Search, Settings2, ShieldCheck, UserRound, Volume2, VolumeX } from 'lucide-react';
 import { audio } from './game/audio';
 import { ENDINGS } from './game/content';
-import { evidenceCount, formatTime, loadGame, loadScores, loadSettings, newGame, recordScore, SETTINGS_KEY, writeStorage } from './game/model';
+import { clearSave, evidenceCount, formatTime, isVictoryEnding, loadGame, loadScores, loadSettings, newGame, recordScore, SETTINGS_KEY, writeStorage } from './game/model';
 import { ui } from './game/i18n';
 import type { GameState, ScoreEntry, Settings } from './game/types';
 import { ControlsPanel, Dialog, HospitalMark, LoadingScreen, PrimaryButton, SettingsPanel } from './components/UI';
@@ -38,7 +38,15 @@ export default function App() {
   }
   function begin() { if (checkpoint) setDialog('new-game'); else start(false); }
   function returnToMenu() { setCheckpoint(loadGame()); setDialog(null); setScreen('menu'); setRun(null); }
-  function endGame(state: GameState) { setEnding(state); setScores(recordScore(state)); setScreen('ending'); }
+  function endGame(state: GameState) {
+    // Victory endings (escape/truth/secret) clear the checkpoint so Continue is disabled;
+    // defeat/trapped intentionally preserves the last checkpoint for RETRY FROM CHECKPOINT.
+    if (state.ending && isVictoryEnding(state.ending)) {
+      clearSave();
+      setCheckpoint(null);
+    }
+    setEnding(state); setScores(recordScore(state)); setScreen('ending');
+  }
   function toggleSound() {
     audio.start();
     if (settings.volume === 0) setSettings({ ...settings, volume: previousVolume || 65 });

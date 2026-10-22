@@ -42,6 +42,71 @@ export const DOORS = [
   { x: 18, z: 20, flag: 'patient-file', name: 'ISOLATION / SEALED' },
 ];
 
+/** Canonical furniture/collision obstacles — single source of truth for both rendering (engine.ts)
+ *  and pathfinding/LoS. Positions match the hospital and object meshes; sizes are the
+ *  collision boxes used by HospitalEngine.canMove. Keep this in sync with buildHospital/buildObjects. */
+export const OBSTACLES: { x: number; z: number; w: number; d: number }[] = [
+  // buildHospital — wheelchair + shelves
+  { x: center(12.1), z: center(16.5), w: 0.95, d: 1.05 },
+  { x: center(15.5), z: center(3), w: 1.2, d: 0.45 },
+  { x: center(17), z: center(3), w: 1.2, d: 0.45 },
+  { x: center(19.5), z: center(3), w: 1.2, d: 0.45 },
+  { x: center(15.5), z: center(12.5), w: 1.6, d: 0.55 },
+  { x: center(15.5), z: center(16.8), w: 1.6, d: 0.55 },
+  // buildHospital — ward / corridor beds
+  { x: center(2.8), z: center(12.8), w: 1.05, d: 2.1 },
+  { x: center(7.5), z: center(15.8), w: 1.05, d: 2.1 },
+  { x: center(16), z: center(25.5), w: 1.05, d: 2.1 },
+  { x: center(10.2), z: center(21), w: 1.05, d: 2.1 },
+  // buildObjects — interactables
+  { x: center(11), z: center(4), w: 1.6, d: 0.8 }, // desk
+  { x: center(19), z: center(5), w: 1.15, d: 0.65 }, // generator
+  { x: center(4), z: center(4), w: 2.1, d: 1 }, // monitor
+  { x: center(4), z: center(14), w: 1.05, d: 2.1 }, // ward bed
+  { x: center(19), z: center(14), w: 1.4, d: 0.75 }, // file cabinet
+  { x: center(18), z: center(24), w: 1.05, d: 2.1 }, // isolation patient bed
+  // lockers
+  { x: center(7), z: center(7), w: 0.9, d: 0.7 },
+  { x: center(20), z: center(7), w: 0.9, d: 0.7 },
+  { x: center(3), z: center(17), w: 0.9, d: 0.7 },
+  { x: center(20), z: center(17), w: 0.9, d: 0.7 },
+  { x: center(3), z: center(24), w: 0.9, d: 0.7 },
+];
+
+export function isObstacleBlocked(x: number, z: number, radius = 0.25): boolean {
+  return OBSTACLES.some(o => Math.abs(x - o.x) < o.w / 2 + radius && Math.abs(z - o.z) < o.d / 2 + radius);
+}
+
+export function isPassable(x: number, z: number, state: GameState, radius = 0.28): boolean {
+  return isWalkable(x, z, state) && !isObstacleBlocked(x, z, radius);
+}
+
+function segmentIntersectsExpandedAABB(x1: number, z1: number, x2: number, z2: number, o: { x: number; z: number; w: number; d: number }, pad = 0.08): boolean {
+  const minX = o.x - o.w / 2 - pad, maxX = o.x + o.w / 2 + pad;
+  const minZ = o.z - o.d / 2 - pad, maxZ = o.z + o.d / 2 + pad;
+  const segMinX = Math.min(x1, x2), segMaxX = Math.max(x1, x2);
+  const segMinZ = Math.min(z1, z2), segMaxZ = Math.max(z1, z2);
+  if (segMaxX < minX || segMinX > maxX || segMaxZ < minZ || segMinZ > maxZ) return false;
+  const dx = x2 - x1, dz = z2 - z1;
+  let tMin = 0, tMax = 1;
+  const clip = (p: number, q: number) => {
+    if (p === 0) return q >= 0;
+    const t = q / p;
+    if (p < 0) { if (t > tMax) return false; if (t > tMin) tMin = t; }
+    else { if (t < tMin) return false; if (t < tMax) tMax = t; }
+    return true;
+  };
+  if (!clip(-dx, x1 - minX)) return false;
+  if (!clip(dx, maxX - x1)) return false;
+  if (!clip(-dz, z1 - minZ)) return false;
+  if (!clip(dz, maxZ - z1)) return false;
+  return tMin <= tMax;
+}
+
+export function lineBlockedByObstacle(x1: number, z1: number, x2: number, z2: number): boolean {
+  return OBSTACLES.some(o => segmentIntersectsExpandedAABB(x1, z1, x2, z2, o));
+}
+
 function object(id: string, label: string, kind: WorldObject['kind'], x: number, z: number, room: string): WorldObject {
   return { id, label, kind, x: center(x), z: center(z), room };
 }
@@ -75,6 +140,7 @@ export function isWalkable(x: number, z: number, state: GameState): boolean {
 }
 
 export function lineOfSight(x1: number, z1: number, x2: number, z2: number, state: GameState) {
+  if (lineBlockedByObstacle(x1, z1, x2, z2)) return false;
   const distance = Math.hypot(x2 - x1, z2 - z1);
   const steps = Math.ceil(distance / 0.35);
   for (let i = 1; i < steps; i++) {
@@ -96,7 +162,7 @@ export function findPath(x1: number, z1: number, x2: number, z2: number, state: 
     if (x === goal[0] && z === goal[1]) { end = key(x, z); break; }
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = x + dx, nz = z + dz, k = key(nx, nz);
-      if (!previous.has(k) && isWalkable(center(nx), center(nz), state)) {
+      if (!previous.has(k) && isPassable(center(nx), center(nz), state)) {
         previous.set(k, key(x, z)); queue.push([nx, nz]);
       }
     }

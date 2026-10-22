@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { DOCUMENTS } from '../src/game/content';
-import { determineEnding, evidenceCount, flag, formatTime, has, loadGame, loadScores, loadSettings, newGame, recordScore, resolveAction, SAVE_KEY, saveGame, SETTINGS_KEY } from '../src/game/model';
-import { center, findPath, isWalkable, NIGHT_SECONDS } from '../src/game/world';
+import { clearSave, determineEnding, evidenceCount, flag, formatTime, has, isVictoryEnding, loadGame, loadScores, loadSettings, newGame, recordScore, resolveAction, SAVE_KEY, saveGame, SETTINGS_KEY } from '../src/game/model';
+import { center, findPath, isObstacleBlocked, isPassable, isWalkable, lineBlockedByObstacle, lineOfSight, NIGHT_SECONDS, OBSTACLES } from '../src/game/world';
 
 function completeToArchive() {
   const s = newGame();
@@ -71,15 +71,16 @@ test('one-time interactions cannot farm score or reset the pursuer', () => {
 
 test('keys gate all routes into locked sections and paths connect all rooms', () => {
   const s = newGame();
-  expect(findPath(s.player.x, s.player.z, center(19), center(5), s)).toHaveLength(0);
+  // Use walkable targets adjacent to furniture, not inside blocking boxes (furniture now blocks enemy & player)
+  expect(findPath(s.player.x, s.player.z, center(16), center(5), s)).toHaveLength(0);
   flag(s, 'staff-key');
-  expect(findPath(s.player.x, s.player.z, center(19), center(5), s).length).toBeGreaterThan(0);
-  expect(findPath(s.player.x, s.player.z, center(19), center(14), s)).toHaveLength(0);
+  expect(findPath(s.player.x, s.player.z, center(16), center(5), s).length).toBeGreaterThan(0);
+  expect(findPath(s.player.x, s.player.z, center(17), center(14), s)).toHaveLength(0);
   flag(s, 'records-key');
-  expect(findPath(s.player.x, s.player.z, center(19), center(14), s).length).toBeGreaterThan(0);
-  expect(findPath(s.player.x, s.player.z, center(18), center(24), s)).toHaveLength(0);
+  expect(findPath(s.player.x, s.player.z, center(17), center(14), s).length).toBeGreaterThan(0);
+  expect(findPath(s.player.x, s.player.z, center(17), center(23), s)).toHaveLength(0);
   flag(s, 'patient-file');
-  expect(findPath(s.player.x, s.player.z, center(18), center(24), s).length).toBeGreaterThan(0);
+  expect(findPath(s.player.x, s.player.z, center(17), center(23), s).length).toBeGreaterThan(0);
   expect(findPath(s.player.x, s.player.z, center(4), center(23), s).length).toBeGreaterThan(0);
   expect(isWalkable(-1, -1, s)).toBe(false);
 });
@@ -117,4 +118,82 @@ test('battery use and irreversible choices affect resources and secret eligibili
   resolveAction(s, 'battery'); expect(s.player.battery).toBe(80); expect(s.batteries).toBe(spares - 1);
   resolveAction(s, 'tape'); resolveAction(s, 'secret', 'silence'); resolveAction(s, 'broadcast', 'name'); resolveAction(s, 'broadcast', 'truth');
   expect(determineEnding(s)).toBe('truth');
+});
+
+// P0-A: enemy must respect same furniture obstacles as player — no teleport through beds/desks/lockers
+test('enemy pathfinding and line-of-sight respect furniture (P0-A)', () => {
+  const s = newGame();
+  // Every canonical obstacle must be considered blocked for both player and enemy
+  for (const o of OBSTACLES) {
+    expect(isObstacleBlocked(o.x, o.z, 0.1)).toBe(true);
+    expect(isPassable(o.x, o.z, s, 0.1)).toBe(false);
+  }
+  // Bed at (4,14) straddles two grid cells; a path between its east/west neighbours must detour
+  const west = { x: center(3), z: center(14) };
+  const east = { x: center(5), z: center(14) };
+  // Without obstacle the Manhattan distance would be 2; with the bed it must be >2
+  const path = findPath(west.x, west.z, east.x, east.z, s);
+  expect(path.length).toBeGreaterThan(2);
+  // No step of the path may be inside a furniture bounding box
+  for (const step of path) {
+    expect(isObstacleBlocked(step.x, step.z, 0.05)).toBe(false);
+  }
+  // Line of sight across the bed must be blocked — enemy cannot see through furniture
+  expect(lineOfSight(west.x, west.z, east.x, east.z, s)).toBe(false);
+  expect(lineBlockedByObstacle(west.x, west.z, east.x, east.z)).toBe(true);
+  // Open corridor sightline (central corridor, no furniture) must remain clear
+  expect(lineOfSight(center(11), center(10), center(11), center(12), s)).toBe(true);
+  // findPath must still be deterministic — repeated calls yield identical result
+  const again = findPath(west.x, west.z, east.x, east.z, s);
+  expect(path).toEqual(again);
+});
+
+test('save semantics: victory clears checkpoint, trapped preserves it (P0-B)', () => {
+  const storage = new Map<string, string>();
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (k: string) => storage.get(k) ?? null,
+      setItem: (k: string, v: string) => storage.set(k, v),
+      removeItem: (k: string) => { storage.delete(k); },
+    },
+  });
+
+  // Victory (escape/truth/secret) — checkpoint must be cleared so Continue is disabled
+  for (const ending of ['escape', 'truth', 'secret'] as const) {
+    expect(isVictoryEnding(ending)).toBe(true);
+    const s = newGame();
+    s.elapsed = NIGHT_SECONDS;
+    // simulate reaching 6am checkpoint then exiting to victory
+    expect(saveGame(s)).toBe(true);
+    expect(loadGame()).not.toBe(null);
+    s.ending = ending;
+    // App.tsx endGame would call clearSave() — test the primitive
+    expect(clearSave()).toBe(true);
+    expect(loadGame()).toBe(null);
+    expect(storage.has(SAVE_KEY)).toBe(false);
+  }
+
+  // Defeat (trapped) — checkpoint must be preserved for retry
+  expect(isVictoryEnding('trapped')).toBe(false);
+  const good = completeToArchive();
+  expect(saveGame(good)).toBe(true);
+  const savedRaw = storage.get(SAVE_KEY)!;
+  const bad = { ...good, player: { ...good.player, health: 0 }, ending: 'trapped' as const } as unknown as typeof good;
+  // saveGame must refuse to overwrite a finished/trauma state
+  expect(saveGame(bad)).toBe(false);
+  expect(storage.get(SAVE_KEY)).toBe(savedRaw);
+  expect(loadGame()?.mission).toBe(good.mission);
+
+  // Corrupted / outdated saves must be rejected safely
+  storage.set(SAVE_KEY, '{not-json');
+  expect(loadGame()).toBe(null);
+  storage.set(SAVE_KEY, JSON.stringify({ ...good, version: 999 }));
+  expect(loadGame()).toBe(null);
+  storage.set(SAVE_KEY, JSON.stringify({ ...good, ending: 'escape' }));
+  expect(loadGame()).toBe(null);
+  storage.set(SAVE_KEY, JSON.stringify({ ...good, player: { ...good.player, health: 0 } }));
+  expect(loadGame()).toBe(null);
+
+  Reflect.deleteProperty(globalThis, 'localStorage');
 });

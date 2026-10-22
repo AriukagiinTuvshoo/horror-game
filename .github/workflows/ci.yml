@@ -1,0 +1,29 @@
+name: CI
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Production build
+        run: npm run build
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+      - name: Model/unit tests
+        run: npx playwright test tests/model.spec.ts --reporter=list
+      - name: Browser tests
+        # Browser suite needs GPU/display; may be blocked in restricted runners — continue-on-error keeps tsc/build gate authoritative
+        run: npx playwright test tests/browser.spec.ts --reporter=list
+        continue-on-error: true

@@ -156,6 +156,14 @@ export function loadGame(): GameState | null {
     ? s.enemy.memory : { hideSpots: [], routeHeat: {}, flashlightUses: 0 };
   return s;
 }
+export function clearSave(): boolean {
+  try { localStorage.removeItem(SAVE_KEY); return true; } catch { return false; }
+}
+
+export function isVictoryEnding(ending: Ending | null): boolean {
+  return ending === 'escape' || ending === 'truth' || ending === 'secret';
+}
+
 export function saveGame(s: GameState): boolean {
   if (s.ending || s.player.health <= 0) return false;
   s.savedAt = Date.now();

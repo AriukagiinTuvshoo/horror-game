@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { audio } from './audio';
 import { localizeMessage } from './i18n';
 import { has, resolveAction, saveGame } from './model';
-import { center, DOORS, findPath, getLocation, GRID, HEIGHT, isWalkable, lineOfSight, NIGHT_SECONDS, OBJECTS, ROOMS, TILE, WIDTH } from './world';
+import { center, DOORS, findPath, getLocation, GRID, HEIGHT, isObstacleBlocked, isPassable, isWalkable, lineOfSight, NIGHT_SECONDS, OBJECTS, OBSTACLES, ROOMS, TILE, WIDTH } from './world';
 import type { CameraMode, GameState, Settings, Snapshot, WorldObject } from './types';
 
 interface Callbacks {
@@ -94,7 +94,8 @@ export class HospitalEngine {
   private lightingPool: THREE.PointLight[] = [];
   private doors: { mesh: THREE.Group; flag: string }[] = [];
   private objectMeshes = new Map<string, THREE.Group>();
-  private obstacles: Obstacle[] = [];
+  // Single source of truth is world.OBSTACLES; engine.obstacles is a local copy for canMove.
+  private obstacles: Obstacle[] = [...OBSTACLES];
   private dust: THREE.Points;
   private glowMaterial = new THREE.MeshStandardMaterial({ color: 0xd1a16b, emissive: 0xa66b32, emissiveIntensity: .7, roughness: .5 });
   private metal = new THREE.MeshStandardMaterial({ color: 0x465654, metalness: .65, roughness: .62 });
@@ -220,7 +221,7 @@ export class HospitalEngine {
       const wheel = new THREE.Mesh(new THREE.TorusGeometry(.38, .035, 7, 22), this.metal); wheel.rotation.y = Math.PI / 2; wheel.position.set(x, .4, -.1); wheelchair.add(wheel);
       this.box(.035, .65, .035, this.metal, x, .84, -.3, wheelchair); this.box(.05, .04, .68, this.metal, x, .85, 0, wheelchair); this.box(.26, .04, .3, this.metal, x * .6, .16, .51, wheelchair);
     }
-    this.obstacles.push({ x: center(12.1), z: center(16.5), w: .95, d: 1.05 });
+    // collision defined in world.ts OBSTACLES (wheelchair) — not duplicated here
     for (const [gx, gz] of [[8, 6.8], [15.3, 14.7], [20.5, 25.8]] as const) {
       const pole = new THREE.Group(); pole.position.set(center(gx), 0, center(gz)); this.scene.add(pole);
       this.box(.035, 2.05, .035, this.metal, 0, 1.05, 0, pole); this.box(.65, .035, .035, this.metal, 0, 2.02, 0, pole);
@@ -231,10 +232,10 @@ export class HospitalEngine {
     for (const [gx, gz] of [[15.5, 3], [17, 3], [19.5, 3]]) {
       const x = center(gx), z = center(gz); this.box(1.2, 1.8, .45, this.metal, x, .9, z);
       for (let y = .4; y < 1.8; y += .45) this.box(1.3, .04, .52, this.dark, x, y, z - .02);
-      this.obstacles.push({ x, z, w: 1.2, d: .45 });
+      // collision in world.ts OBSTACLES
     }
     for (const gz of [12.5, 16.8]) {
-      const x = center(15.5), z = center(gz); this.box(1.6, 1.5, .55, this.metal, x, .75, z); this.obstacles.push({ x, z, w: 1.6, d: .55 });
+      const x = center(15.5), z = center(gz); this.box(1.6, 1.5, .55, this.metal, x, .75, z);
     }
     const chapelCross = new THREE.MeshStandardMaterial({ color: 0x776c50, roughness: .9 });
     this.box(.15, 1.1, .12, chapelCross, center(5), 2.2, 21 * TILE + .13);
@@ -287,7 +288,8 @@ export class HospitalEngine {
     for (const dx of [-.45, .45]) for (const dz of [-.9, .9]) { this.box(.045, .55, .045, this.metal, dx, .3, dz, group); this.box(.1, .09, .15, this.dark, dx, .07, dz, group); }
     for (const dz of [-1, 1]) this.box(1.04, .48, .035, this.metal, 0, .9, dz, group);
     if (interactive) this.box(.14, .06, .13, this.glowMaterial, .2, .18, .45, group);
-    this.obstacles.push({ x, z, w: 1.05, d: 2.1 }); return group;
+    // collision defined in world.ts OBSTACLES
+    return group;
   }
 
   private buildObjects() {
@@ -300,22 +302,22 @@ export class HospitalEngine {
           this.box(1.6, .12, .8, this.dark, 0, .91, 0, group);
           for (const dx of [-.65, .65]) this.box(.08, .9, .65, this.metal, dx, .45, 0, group);
           this.box(.48, .02, .38, paper, -.2, 1, -.04, group); this.box(.23, .19, .14, this.metal, .43, 1.06, 0, group);
-          this.obstacles.push({ x: o.x, z: o.z, w: 1.6, d: .8 }); break;
+          break;
         case 'generator':
           this.box(1.15, 1.7, .65, this.metal, 0, .85, 0, group); this.box(.65, .35, .07, screenMat, 0, 1.3, .35, group);
           for (let i = 0; i < 4; i++) this.box(.7, .025, .05, this.dark, 0, .4 + i * .12, .35, group);
-          this.obstacles.push({ x: o.x, z: o.z, w: 1.15, d: .65 }); break;
+          break;
         case 'monitor':
           this.box(2.1, .1, 1, this.dark, 0, .83, 0, group);
           for (const dx of [-.75, .75]) this.box(.09, .8, .7, this.metal, dx, .4, 0, group);
           for (const dx of [-.48, .48]) { this.box(.8, .62, .45, this.dark, dx, 1.21, -.13, group); this.box(.65, .46, .02, screenMat, dx, 1.24, .11, group); }
-          this.box(.75, .04, .25, this.metal, 0, .92, .3, group); this.obstacles.push({ x: o.x, z: o.z, w: 2.1, d: 1 }); break;
-        case 'bed': this.hospitalBed(0, 0, true, group); this.obstacles.pop(); this.obstacles.push({ x: o.x, z: o.z, w: 1.05, d: 2.1 }); break;
+          this.box(.75, .04, .25, this.metal, 0, .92, .3, group); break;
+        case 'bed': this.hospitalBed(0, 0, true, group); break;
         case 'file':
           this.box(1.4, .9, .75, this.metal, 0, .45, 0, group); this.box(.5, .045, .4, paper, 0, .94, .08, group);
-          this.box(.16, .18, .1, this.glowMaterial, .47, 1.02, .15, group); this.obstacles.push({ x: o.x, z: o.z, w: 1.4, d: .75 }); break;
+          this.box(.16, .18, .1, this.glowMaterial, .47, 1.02, .15, group); break;
         case 'patient':
-          this.hospitalBed(0, 0, false, group); this.obstacles.pop(); this.obstacles.push({ x: o.x, z: o.z, w: 1.05, d: 2.1 });
+          this.hospitalBed(0, 0, false, group);
           this.box(.57, .21, 1.18, this.dark, 0, .93, .05, group);
           { const head = new THREE.Mesh(new THREE.SphereGeometry(.16, 12, 10), this.pale); head.position.set(0, .99, -.65); group.add(head); }
           this.box(.4, .8, .35, this.metal, 1.0, .8, -.4, group); this.box(.28, .23, .02, screenMat, 1, 1, -.21, group); break;
@@ -327,7 +329,7 @@ export class HospitalEngine {
         case 'locker':
           this.box(.9, 2.2, .7, this.metal, 0, 1.1, 0, group); this.box(.82, 2.1, .025, this.dark, 0, 1.1, .37, group);
           for (let i = 0; i < 4; i++) this.box(.4, .018, .035, this.metal, 0, 1.7 + i * .07, .4, group);
-          this.box(.045, .2, .07, this.pale, .26, 1, .42, group); this.obstacles.push({ x: o.x, z: o.z, w: .9, d: .7 }); break;
+          this.box(.045, .2, .07, this.pale, .26, 1, .42, group); break;
         case 'battery':
           this.box(.3, .55, .3, this.dark, 0, .28, 0, group); this.box(.24, .13, .24, this.glowMaterial, 0, .62, 0, group); break;
         case 'medkit':
@@ -463,7 +465,7 @@ export class HospitalEngine {
     this.state.distractions--;
     const p = this.state.player;
     let x = p.x, z = p.z;
-    for (let d = .5; d < 10; d += .5) { const nx = p.x - Math.sin(p.yaw) * d, nz = p.z - Math.cos(p.yaw) * d; if (!isWalkable(nx, nz, this.state)) break; x = nx; z = nz; }
+    for (let d = .5; d < 10; d += .5) { const nx = p.x - Math.sin(p.yaw) * d, nz = p.z - Math.cos(p.yaw) * d; if (!isPassable(nx, nz, this.state, 0.2)) break; x = nx; z = nz; }
     this.emitNoise(28, x, z); audio.step(true, .7, .8); this.callbacks.onMessage('METAL CLATTERS / Something turns toward the sound.');
     const ring = new THREE.Mesh(new THREE.RingGeometry(.08, .13, 20), new THREE.MeshBasicMaterial({ color: 0xd7ac78, transparent: true, opacity: .7, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2; ring.position.set(x, .03, z); this.scene.add(ring);
@@ -497,6 +499,8 @@ export class HospitalEngine {
   private canMove(x: number, z: number) {
     const r = .25;
     if (![[r, r], [-r, r], [r, -r], [-r, -r]].every(([dx, dz]) => isWalkable(x + dx, z + dz, this.state))) return false;
+    // Furniture blocks identically for player and enemy — world.OBSTACLES is canonical.
+    if (isObstacleBlocked(x, z, r)) return false;
     return !this.obstacles.some(o => Math.abs(x - o.x) < o.w / 2 + r && Math.abs(z - o.z) < o.d / 2 + r);
   }
 
@@ -583,7 +587,7 @@ export class HospitalEngine {
         const speed = e.mode === 'chasing' ? 1.9 + night * .4 + learned + (has(s, 'gave-name') ? .25 : 0) : e.mode === 'investigating' ? 1.45 + night * .4 : 1.05 + night * .35;
         if (d > .08) {
           const step = Math.min(d, speed * dt); const nx = e.x + dx / d * step, nz = e.z + dz / d * step;
-          if (isWalkable(nx, e.z, s)) e.x = nx; if (isWalkable(e.x, nz, s)) e.z = nz;
+          if (isPassable(nx, e.z, s, 0.3)) e.x = nx; if (isPassable(e.x, nz, s, 0.3)) e.z = nz;
           this.enemyGroup.rotation.y = Math.atan2(dx, dz);
         }
         if (d < .25) this.path.shift();
