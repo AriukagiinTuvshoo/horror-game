@@ -1,0 +1,88 @@
+import type { DocumentContent, Ending, Mission } from './types';
+
+export const MISSIONS: Mission[] = [
+  { title: 'Clock in.', description: 'Read the shift manifest on the desk in front of you. Take the staff key.', target: 'shift', room: 'North corridor' },
+  { title: 'Bring the lights back.', description: 'Find the auxiliary power panel in Maintenance. The incident log holds the code.', target: 'generator', room: 'Maintenance' },
+  { title: 'Someone is still here.', description: 'Use the security terminal. Check the Ward C camera for movement.', target: 'monitor', room: 'Security' },
+  { title: 'Beneath the empty bed.', description: 'Find the records key in Ward C. Listen carefully to the radio.', target: 'ward', room: 'Ward C' },
+  { title: 'Read what they buried.', description: 'Unlock the sealed file in Records. The witness statement contains four numbers.', target: 'records', room: 'Records' },
+  { title: 'A breath in the dark.', description: 'Find Patient 09 in Isolation. Decide who deserves to see the morning.', target: 'isolation', room: 'Isolation' },
+  { title: 'Give the silence a voice.', description: 'Recover Nora\'s tape in the Chapel, then broadcast it from the security terminal.', target: 'tape', room: 'Chapel / Security' },
+  { title: 'Make it to morning.', description: 'Survive until 6:00 AM, then return to the north entrance. Do not follow the voice.', target: 'exit', room: 'North entrance' },
+];
+
+const document = (title: string, label: string, beginner: string, intermediate: string, advanced: string, hint: string, words: string[]): DocumentContent => ({
+  title, label, body: { beginner, intermediate, advanced }, hint, words,
+});
+
+export const DOCUMENTS: Record<string, DocumentContent> = {
+  shift: document('Your name is already here.', 'NIGHT REGISTER / 31 OCT 1999',
+    'Your shift begins at midnight and ends at six in the morning. Take the staff key. Turn on the power in Maintenance, to the right of the corridor. Then check the cameras in Security. If you see a woman standing in the hall, shine your light on her and keep watching. She cannot move while you watch her. Do not tell the radio voice your name.\n\nAt the bottom of the register, your full name appears beside PATIENT 00. The ink is dated 1999.\n\n- Dr. Evelyn Cross',
+    'Your shift runs from midnight until 6:00 AM. Collect the staff key and restore auxiliary power in Maintenance, on the right. Report to Security afterward. If a woman is standing in the corridor, keep your flashlight on her. She cannot move while you are watching her. Never give the radio operator your name.\n\nYour full name already appears in the 1999 register beside PATIENT ZERO. The signature beneath it looks like yours.\n\n- Dr. Evelyn Cross',
+    'Your appointment commences at midnight and concludes at 0600. Retrieve the staff key, restore auxiliary power in Maintenance, and report to Security. Should the woman linger in the corridor, illuminate her without averting your gaze: observation inhibits her movement. Under no circumstances disclose your identity to the radio operator.\n\nThe 1999 register identifies you as PATIENT ZERO. Its signature is indistinguishable from your own.\n\n- Dr. Evelyn Cross',
+    '"Keep watching" means continue looking at something. "Midnight" is 12:00 at night. Maintenance is the room where equipment is repaired.', ['shift', 'auxiliary', 'corridor', 'avert']),
+  generator: document('The clocks stopped.', 'MAINTENANCE LOG / INCIDENT 0317',
+    'The power failed at 03:17. All the clocks stopped at the same time. The new four-digit code is the time of the failure. Use all four digits, including the zero.\n\nSomeone has written below: "The blackout was not an accident. They needed the alarms to stop."',
+    'At 03:17, a simultaneous outage silenced every alarm on the ward. For ease of recall, the engineer reset the four-digit auxiliary access code to the exact time of the failure. Retain the leading zero.\n\nIn another hand: "It was never an accident. They wanted the alarms quiet."',
+    'The facility suffered a synchronized outage at seventeen minutes past three. The attending engineer subsequently adopted that timestamp, in twenty-four-hour notation with a leading zero, as the auxiliary override.\n\nA handwritten addendum disputes the official account: "A failure does not silence only the alarms you choose."',
+    'A "leading zero" is a zero at the start of a number. An "outage" is a period when power is unavailable. Read the time as four digits.', ['outage', 'override', 'simultaneous']),
+  ward: document('Count the beds. Four is safe.', 'CONFLICTING TRANSMISSION / WARD C',
+    'A calm man on the radio says: "Open the red cabinet." A second, weaker voice interrupts: "Do not trust him. Count the beds. Four is safe. The records key is beneath the fourth empty bed."\n\nThe room contains four beds. The patient chart lists five. The missing fifth bed belongs to PATIENT 00, and the name beside it is yours.',
+    'The radio operator orders you to open the red cabinet. Beneath his voice, a woman repeats: "Count the beds. Four is safe. The records key is beneath the fourth unoccupied bed."\n\nFour physical beds stand in the ward, but the admission ledger records five. Bed Five belongs to PATIENT ZERO. It carries your name.',
+    'The operator directs you toward the crimson cabinet. A second transmission contradicts him: "Reconcile the ward with its ledger. Four is safe. Retrieve the key beneath the fourth unoccupied cot."\n\nThe architecture accounts for four beds; the register insists upon five. The absent fifth allocation identifies you as PATIENT ZERO.',
+    '"Beneath" means under. "Unoccupied" means nobody is using it. "Leave it shut" means do not open it.', ['beneath', 'unoccupied', 'discharged', 'betray']),
+  records: document('Patient Zero is you.', 'SEALED ARCHIVE / DR. EVELYN CROSS',
+    'The witness left a code in this sentence: "One doctor. Nine locked rooms. Eight silent alarms. Four survivors." Enter the numbers in the order you read them.\n\nThe hospital tested oxygen deprivation without permission. Your name is on Patient 00\'s card. One note says Dr. Evelyn Cross saved you. Another calls you the experiment\'s only successful result. Both carry her signature.',
+    'The witness encoded the archive access in four details: "One physician authorized it. Nine rooms were sealed. Eight alarms were disconnected. Four witnesses survived." Preserve their order.\n\nProject Lullaby deliberately deprived patients of oxygen. A manufactured blackout concealed the trial. Discharge forms were substituted for death certificates. Nora was the only nurse who refused to sign.',
+    'The archive cipher preserves the witness\'s sequence: "A solitary physician sanctioned it; nine chambers were sealed; eight alarms were disabled; a quartet of witnesses remained."\n\nProject Lullaby induced hypoxia without informed consent. A contrived outage obscured the trial, and falsified discharge records concealed its casualties. Nurse Nora Bell refused to countersign.',
+    '"Solitary" means one. A "quartet" is a group of four. "Preserve their order" means do not rearrange the sequence.', ['witness', 'consent', 'conceal', 'deprivation']),
+  isolation: document('There is still someone breathing.', 'ISOLATION / PATIENT 09',
+    'A woman lies behind the glass. The oxygen machine is nearly empty. The power fuse in your pocket can restart it.\n\nThe radio says, "Turn it off. She is not alive." But you can see her breath on the glass.\n\nA bracelet reads MARA BELL. Nora\'s daughter.\n\nRestoring oxygen will use your spare fuse and some flashlight power. Cutting the supply will make this wing quieter.',
+    'Behind the observation glass, a woman exhales against the pane. Her oxygen pump is failing. Your spare fuse could keep it running.\n\nThe radio insists, "Disconnect it. Nothing in that room is alive." The condensation says otherwise. Her bracelet reads MARA BELL. Nora\'s daughter.\n\nRestoring the supply costs your fuse and 12% battery. Cutting it reduces the noise in this wing. The choice cannot be undone.',
+    'A shallow breath clouds the observation pane. The patient\'s failing oxygen pump is compatible with your auxiliary fuse.\n\nThe intercom contradicts the evidence before you: "Sever the supply. There is no one left to save." Her identity band reads MARA BELL, daughter of the nurse who refused to remain silent.\n\nRestoration consumes the fuse and 12% battery. Disconnection renders the wing quieter. Neither consequence is reversible.',
+    '"Otherwise" means the opposite is true. "Cannot be undone" means the decision is permanent. Trust what you observe, not only what you hear.', ['condensation', 'restore', 'irreversible']),
+  tape: document('Someone has to remember us.', 'PERSONAL RECORDING / NORA BELL',
+    '"My name is Nora Bell. The alarms did not fail. Dr. Vale turned them off. I stayed for my daughter, Mara. If you find this, play it over the hospital radio. Say what happened. Do not say your own name.\n\nThe memorial safe asks a question. What can you break without touching it? It is what they made us promise.\n\nPlease. Do not let them call this place empty."',
+    '"This is Nora Bell, final night supervisor. Vale ordered the alarms disconnected. I stayed because Mara was still in Isolation. Broadcast this recording through Security. Let the names of the dead out. Keep your own name to yourself.\n\nThe memorial safe holds the original trial ledger. Its riddle: what can be broken without being touched? Think of the promise they forced upon us.\n\nAn empty building is not the same as an innocent one."',
+    '"Nora Bell, night supervisor, making my final deposition. Vale authorized every disconnection. I remained because my daughter was confined to Isolation. Transmit this testimony from Security. Release the truth, but withhold your identity.\n\nThe memorial safe contains the unaltered ledger. Its inscription asks what may be broken without physical contact: the condition imposed upon every witness.\n\nAbandonment does not absolve a building of what happened within it."',
+    '"Break" does not always mean damage an object. You can also break a rule, a promise, or a period with no sound.', ['testimony', 'withhold', 'absolve', 'silence']),
+  secret: document('For those without a discharge.', 'MEMORIAL SAFE / RESTRICTED',
+    'Carved into the brass: "What can be broken without being touched?"\n\nBelow, in Nora\'s handwriting: "They made us promise never to speak. I broke it. Now you must, too."\n\nEnter one English word.',
+    'An inscription on the brass asks: "What can be broken, yet has neither shape nor substance?"\n\nNora has added: "They demanded that we never speak. I broke their condition. You can, too."\n\nThe lock accepts a single English word.',
+    'The memorial bears a paradox: "Intangible and formless, I am broken by the very act of naming me. What am I?"\n\nA handwritten annotation reads: "The condition to which every witness was sworn. Let it end here."\n\nA single word opens the lock.',
+    '"Intangible" means impossible to touch. Think about what disappears the moment someone starts speaking.', ['intangible', 'ledger']),
+};
+
+export const VOCABULARY: Record<string, { definition: string; example: string }> = {
+  shift: { definition: 'A scheduled period of work.', example: 'My night shift ends at six in the morning.' },
+  auxiliary: { definition: 'Providing extra support or backup.', example: 'The auxiliary generator supplies emergency power.' },
+  corridor: { definition: 'A long passage connecting rooms.', example: 'Keep the hospital corridor clear.' },
+  avert: { definition: 'To turn away, especially your eyes.', example: 'Do not avert your gaze from the patient.' },
+  outage: { definition: 'A period when power or a service is not available.', example: 'The outage silenced the hospital alarms.' },
+  override: { definition: 'To take control instead of an automatic system.', example: 'Use the manual override to open the door.' },
+  simultaneous: { definition: 'Happening at exactly the same time.', example: 'The simultaneous alarms stopped suddenly.' },
+  beneath: { definition: 'Under or below something.', example: 'The key is beneath the empty bed.' },
+  unoccupied: { definition: 'Empty; not being used by anyone.', example: 'Only one bed in the ward is unoccupied.' },
+  discharged: { definition: 'Officially allowed to leave a hospital.', example: 'The patient was discharged on Monday.' },
+  betray: { definition: 'To reveal a secret or break someone\'s trust.', example: 'Your footsteps might betray your hiding place.' },
+  witness: { definition: 'Someone who sees an event happen.', example: 'The witness described the night of the incident.' },
+  consent: { definition: 'Permission to do something.', example: 'Treatment requires the patient\'s consent.' },
+  conceal: { definition: 'To hide something from sight or knowledge.', example: 'Someone tried to conceal the medical records.' },
+  deprivation: { definition: 'The harmful lack of something necessary.', example: 'Oxygen deprivation can cause serious injury.' },
+  condensation: { definition: 'Small drops formed when warm air meets a cold surface.', example: 'Her breath left condensation on the window.' },
+  restore: { definition: 'To bring something back to its previous working condition.', example: 'Replace the fuse to restore power.' },
+  irreversible: { definition: 'Impossible to change back or undo.', example: 'Some decisions have irreversible consequences.' },
+  testimony: { definition: 'A formal statement of what someone knows or witnessed.', example: 'Nora recorded her testimony on a cassette.' },
+  withhold: { definition: 'To refuse to give or reveal something.', example: 'Withhold your name when the voice asks.' },
+  absolve: { definition: 'To free someone from blame or responsibility.', example: 'Following orders does not absolve you of responsibility.' },
+  silence: { definition: 'The absence of sound or a refusal to speak.', example: 'Her testimony finally broke the silence.' },
+  intangible: { definition: 'Something that cannot be physically touched.', example: 'Fear is intangible, but it feels very real.' },
+  ledger: { definition: 'A book used to keep official records.', example: 'The original ledger contains every patient\'s name.' },
+};
+
+export const ENDINGS: Record<Ending, { label: string; title: string; body: string; number: string }> = {
+  escape: { number: 'I', label: 'THE ESCAPE', title: 'You made it out.', body: 'At 6:00 AM, the doors opened. You walked into the pale morning and did not look back. Behind you, the hospital kept its secrets. Some nights end. Others wait for a new name.' },
+  truth: { number: 'II', label: 'TRUTH REVEALED', title: 'The silence is broken.', body: 'Nora\'s testimony escaped the building before you did. By sunrise, the patient files were on every frequency. They can call it an abandoned hospital. They can never again call it an accident.' },
+  trapped: { number: 'III', label: 'THE LAST EMPLOYEE', title: 'Your shift never ends.', body: 'There is a new name on the staff register. Yours. The clocks turn back to midnight. Somewhere in the north corridor, a radio welcomes the next night guard.' },
+  secret: { number: 'IV', label: 'THE ONES WE REMEMBER', title: 'No one left behind.', body: 'You brought out the ledger, the truth, and Mara. As dawn touched the windows, Nora\'s voice finally fell quiet. For the first time in fourteen years, the hospital was only a building. And the morning belonged to everyone.' },
+};
